@@ -1,281 +1,206 @@
-// Canvas setup
-const canvas = document.getElementById('pongCanvas');
-const ctx = canvas.getContext('2d');
+// Scene setup
+const canvas = document.getElementById('canvas');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x0a0a0a);
+renderer.shadowMap.enabled = true;
 
-// Game state
-let gameRunning = false;
-let gameOver = false;
-let winningPlayer = null;
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambientLight);
 
-const WINNING_SCORE = 5;
+const pointLight1 = new THREE.PointLight(0x00d4ff, 1);
+pointLight1.position.set(20, 20, 20);
+pointLight1.castShadow = true;
+scene.add(pointLight1);
 
-// Paddle properties
-const paddleHeight = 100;
-const paddleWidth = 12;
-const paddleSpeed = 6;
+const pointLight2 = new THREE.PointLight(0xff006e, 0.8);
+pointLight2.position.set(-20, 15, -20);
+pointLight2.castShadow = true;
+scene.add(pointLight2);
 
-// Player paddle (left)
-const player = {
-    x: 30,
-    y: canvas.height / 2 - paddleHeight / 2,
-    width: paddleWidth,
-    height: paddleHeight,
-    dy: 0,
-    score: 0
-};
+// Physics world
+const world = new CANNON.World();
+world.gravity.set(0, -30, 0);
+world.defaultContactMaterial.friction = 0.3;
 
-// Computer paddle (right)
-const computer = {
-    x: canvas.width - 30 - paddleWidth,
-    y: canvas.height / 2 - paddleHeight / 2,
-    width: paddleWidth,
-    height: paddleHeight,
-    dy: 0,
-    score: 0
-};
+// Camera position
+camera.position.set(0, 15, 30);
+camera.lookAt(0, 0, 0);
 
-// Ball properties
-const ball = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    radius: 10,
-    dx: 5,
-    dy: 5,
-    speed: 5,
-    maxSpeed: 10
-};
+// Marbles
+const marbles = [];
+let score = 0;
 
-// Event listeners
-document.addEventListener('keydown', handleKeyDown);
-document.addEventListener('keyup', handleKeyUp);
+class Marble {
+  constructor(x, y, z) {
+    const radius = 0.5;
+    const geometry = new THREE.SphereGeometry(radius, 32, 32);
+    const colors = [0x00d4ff, 0xff006e, 0x00ff88, 0xffd700, 0xff6b9d, 0x00ccff];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      metalness: 0.8,
+      roughness: 0.2,
+      emissive: color,
+      emissiveIntensity: 0.3
+    });
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    this.mesh.position.set(x, y, z);
+    scene.add(this.mesh);
 
-document.getElementById('reset-btn').addEventListener('click', resetGame);
+    const shape = new CANNON.Sphere(radius);
+    const body = new CANNON.Body({ mass: 1, shape });
+    body.position.set(x, y, z);
+    world.addBody(body);
+    this.body = body;
+  }
 
-function handleKeyDown(e) {
-    if (e.key === 'ArrowUp') {
-        player.dy = -paddleSpeed;
-    } else if (e.key === 'ArrowDown') {
-        player.dy = paddleSpeed;
-    } else if (e.key === ' ') {
-        e.preventDefault();
-        if (!gameOver) {
-            gameRunning = !gameRunning;
-            updateStatusMessage();
-        }
-    }
+  update() {
+    this.mesh.position.copy(this.body.position);
+    this.mesh.quaternion.copy(this.body.quaternion);
+  }
 }
 
-function handleKeyUp(e) {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        player.dy = 0;
-    }
+// Create initial marbles
+for (let i = 0; i < 8; i++) {
+  const x = (Math.random() - 0.5) * 10;
+  const z = (Math.random() - 0.5) * 10;
+  marbles.push(new Marble(x, 20 + i * 2, z));
 }
 
-function updateStatusMessage() {
-    const statusEl = document.getElementById('status-message');
-    if (gameOver) {
-        statusEl.innerHTML = `<span style="color: #00ff88; text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);">${winningPlayer} Wins! Press New Game to restart</span>`;
-    } else if (gameRunning) {
-        statusEl.innerHTML = 'Press <span class="key">SPACE</span> to Pause';
-    } else {
-        statusEl.innerHTML = 'Press <span class="key">SPACE</span> to Start';
-    }
+// Platforms
+const platformGeometry = new THREE.BoxGeometry(3, 0.5, 3);
+const platformMaterial = new THREE.MeshStandardMaterial({
+  color: 0x1a3a52,
+  metalness: 0.5,
+  roughness: 0.5
+});
+
+function createPlatform(x, y, z, isBonusColor = false) {
+  const material = isBonusColor 
+    ? new THREE.MeshStandardMaterial({
+        color: 0xffd700,
+        metalness: 0.9,
+        roughness: 0.1,
+        emissive: 0xffd700,
+        emissiveIntensity: 0.5
+      })
+    : platformMaterial;
+  
+  const mesh = new THREE.Mesh(platformGeometry, material);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const shape = new CANNON.Box(new CANNON.Vec3(1.5, 0.25, 1.5));
+  const body = new CANNON.Body({ mass: 0, shape });
+  body.position.set(x, y, z);
+  world.addBody(body);
+
+  return { mesh, body, isBonus: isBonusColor };
 }
 
-function updatePlayerPaddle() {
-    player.y += player.dy;
-
-    // Boundary check
-    if (player.y < 0) player.y = 0;
-    if (player.y + player.height > canvas.height) {
-        player.y = canvas.height - player.height;
-    }
+const platforms = [];
+for (let i = 0; i < 5; i++) {
+  const isBonus = Math.random() > 0.7;
+  platforms.push(createPlatform(
+    (Math.random() - 0.5) * 15,
+    10 - i * 4,
+    (Math.random() - 0.5) * 15,
+    isBonus
+  ));
 }
 
-function updateComputerPaddle() {
-    const computerSpeed = 4.5;
-    const computerCenter = computer.y + computer.height / 2;
+// Ground
+const groundGeometry = new THREE.PlaneGeometry(40, 40);
+const groundMaterial = new THREE.MeshStandardMaterial({
+  color: 0x0d1f2d,
+  metalness: 0.3,
+  roughness: 0.7
+});
+const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -5;
+ground.receiveShadow = true;
+scene.add(ground);
 
-    // Smarter AI with prediction
-    if (computerCenter < ball.y - 40) {
-        computer.y += computerSpeed;
-    } else if (computerCenter > ball.y + 40) {
-        computer.y -= computerSpeed;
-    }
+const groundShape = new CANNON.Plane();
+const groundBody = new CANNON.Body({ mass: 0, shape: groundShape });
+groundBody.position.y = -5;
+world.addBody(groundBody);
 
-    // Boundary check
-    if (computer.y < 0) computer.y = 0;
-    if (computer.y + computer.height > canvas.height) {
-        computer.y = canvas.height - computer.height;
-    }
+// Mouse interaction
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', (e) => {
+  mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+document.addEventListener('touchmove', (e) => {
+  mouseX = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+  mouseY = -(e.touches[0].clientY / window.innerHeight) * 2 + 1;
+});
+
+// Wind force based on mouse
+function applyMouseForce() {
+  marbles.forEach(marble => {
+    const forceStrength = 15;
+    marble.body.velocity.x += mouseX * forceStrength * 0.016;
+    marble.body.velocity.z += mouseY * forceStrength * 0.016;
+  });
 }
 
-function updateBall() {
-    ball.x += ball.dx;
-    ball.y += ball.dy;
-
-    // Top and bottom collision
-    if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
-        ball.dy = -ball.dy;
-        ball.y = Math.max(ball.radius, Math.min(canvas.height - ball.radius, ball.y));
+// Score update on platform collision
+world.addEventListener('collide', (e) => {
+  platforms.forEach(platform => {
+    if ((e.body === marbles[0]?.body && e.target === platform.body) ||
+        (e.target === marbles[0]?.body && e.body === platform.body)) {
+      if (platform.isBonus) {
+        score += 50;
+      } else {
+        score += 10;
+      }
+      document.getElementById('score').textContent = score;
     }
+  });
+});
 
-    // Left and right collision (scoring)
-    if (ball.x - ball.radius < 0) {
-        computer.score++;
-        updateScore();
-        resetBall();
-        checkWin();
-    } else if (ball.x + ball.radius > canvas.width) {
-        player.score++;
-        updateScore();
-        resetBall();
-        checkWin();
-    }
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
 
-    // Paddle collision
-    checkPaddleCollision(player);
-    checkPaddleCollision(computer);
-}
+  world.step(1 / 60);
 
-function checkPaddleCollision(paddle) {
-    if (
-        ball.x - ball.radius < paddle.x + paddle.width &&
-        ball.x + ball.radius > paddle.x &&
-        ball.y < paddle.y + paddle.height &&
-        ball.y > paddle.y
-    ) {
-        ball.dx = -ball.dx * 1.02; // Slight speed increase on paddle hit
-        
-        // Add spin based on where ball hits paddle
-        const collidePoint = ball.y - (paddle.y + paddle.height / 2);
-        const spinFactor = collidePoint / (paddle.height / 2);
-        ball.dy += spinFactor * 4;
-        
-        // Limit ball speed
-        const speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
-        if (speed > ball.maxSpeed) {
-            ball.dx = (ball.dx / speed) * ball.maxSpeed;
-            ball.dy = (ball.dy / speed) * ball.maxSpeed;
-        }
-        
-        // Move ball away from paddle
-        ball.x = paddle.x > canvas.width / 2 
-            ? paddle.x - ball.radius - 1
-            : paddle.x + paddle.width + ball.radius + 1;
-    }
-}
+  applyMouseForce();
 
-function resetBall() {
-    ball.x = canvas.width / 2;
-    ball.y = canvas.height / 2;
-    ball.dx = (Math.random() > 0.5 ? 1 : -1) * ball.speed;
-    ball.dy = (Math.random() - 0.5) * ball.speed;
+  marbles.forEach(marble => {
+    marble.update();
     
-    // Add slight delay for visual effect
-    gameRunning = false;
-    setTimeout(() => {
-        updateStatusMessage();
-    }, 100);
-}
-
-function updateScore() {
-    document.getElementById('player1-score').textContent = player.score;
-    document.getElementById('player2-score').textContent = computer.score;
-}
-
-function checkWin() {
-    if (player.score >= WINNING_SCORE) {
-        gameRunning = false;
-        gameOver = true;
-        winningPlayer = 'Player 1';
-        updateStatusMessage();
-    } else if (computer.score >= WINNING_SCORE) {
-        gameRunning = false;
-        gameOver = true;
-        winningPlayer = 'AI';
-        updateStatusMessage();
+    // Reset marble if it falls too low
+    if (marble.body.position.y < -15) {
+      marble.body.position.set(
+        (Math.random() - 0.5) * 10,
+        20,
+        (Math.random() - 0.5) * 10
+      );
+      marble.body.velocity.set(0, 0, 0);
     }
+  });
+
+  renderer.render(scene, camera);
 }
 
-function resetGame() {
-    player.score = 0;
-    computer.score = 0;
-    gameRunning = false;
-    gameOver = false;
-    winningPlayer = null;
-    
-    player.y = canvas.height / 2 - paddleHeight / 2;
-    computer.y = canvas.height / 2 - paddleHeight / 2;
-    
-    ball.x = canvas.width / 2;
-    ball.y = canvas.height / 2;
-    ball.dx = (Math.random() > 0.5 ? 1 : -1) * ball.speed;
-    ball.dy = (Math.random() - 0.5) * ball.speed;
-    
-    updateScore();
-    updateStatusMessage();
-}
+animate();
 
-// Drawing functions
-function drawPaddle(paddle, color) {
-    ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 15;
-    ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
-    ctx.shadowBlur = 0;
-}
-
-function drawBall() {
-    const gradient = ctx.createRadialGradient(ball.x, ball.y, 0, ball.x, ball.y, ball.radius);
-    gradient.addColorStop(0, '#00d4ff');
-    gradient.addColorStop(1, '#00a8cc');
-    
-    ctx.fillStyle = gradient;
-    ctx.shadowColor = '#00d4ff';
-    ctx.shadowBlur = 20;
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-}
-
-function drawCenterLine() {
-    ctx.strokeStyle = 'rgba(0, 212, 255, 0.2)';
-    ctx.setLineDash([15, 15]);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(canvas.width / 2, 0);
-    ctx.lineTo(canvas.width / 2, canvas.height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-}
-
-function drawGame() {
-    // Clear canvas with dark background
-    ctx.fillStyle = '#0a0e27';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw elements
-    drawCenterLine();
-    drawPaddle(player, '#00d4ff');
-    drawPaddle(computer, '#ff006e');
-    drawBall();
-}
-
-// Game loop
-function gameLoop() {
-    if (gameRunning) {
-        updatePlayerPaddle();
-        updateComputerPaddle();
-        updateBall();
-    }
-
-    drawGame();
-    requestAnimationFrame(gameLoop);
-}
-
-// Initialize
-updateStatusMessage();
-updateScore();
-gameLoop();
+// Handle window resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});

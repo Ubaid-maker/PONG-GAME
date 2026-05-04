@@ -1,59 +1,177 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0a0e27">
-    <title>PONG - A Modern Game</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>Marble Cascade - 3D Interactive Game</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a0a2e 50%, #16213e 100%);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: white;
+      text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .title {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #00d4ff, #ff006e);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 2px;
+    }
+
+    .score {
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      padding: 10px 20px;
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(10px);
+    }
+
+    .score-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+
+    .footer {
+      text-align: center;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+    }
+
+    .instructions {
+      background: rgba(0, 212, 255, 0.05);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      padding: 15px 25px;
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+      text-align: center;
+      color: rgba(255, 255, 255, 0.8);
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .instructions strong {
+      color: #00d4ff;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      pointer-events: auto;
+    }
+
+    button {
+      background: linear-gradient(135deg, #00d4ff, #0099cc);
+      border: none;
+      color: white;
+      padding: 12px 30px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .reset-btn {
+      background: linear-gradient(135deg, #ff006e, #ff3d5a);
+    }
+
+    .reset-btn:hover {
+      box-shadow: 0 0 30px rgba(255, 0, 110, 0.6);
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1 class="title">PONG</h1>
-            <p class="subtitle">Classic Game Reimagined</p>
-        </header>
-
-        <div class="game-wrapper">
-            <div class="score-section">
-                <div class="player-info player-1">
-                    <span class="player-label">Player 1</span>
-                    <span class="score" id="player1-score">0</span>
-                </div>
-                <canvas id="pongCanvas" width="1000" height="500"></canvas>
-                <div class="player-info player-2">
-                    <span class="player-label">Player 2 (AI)</span>
-                    <span class="score" id="player2-score">0</span>
-                </div>
-            </div>
-
-            <div class="game-status">
-                <div id="status-message" class="status-message">Press <span class="key">SPACE</span> to Start</div>
-            </div>
-
-            <div class="controls-info">
-                <div class="control-group">
-                    <span class="control-icon">⬆️</span>
-                    <span class="control-text">Move Up</span>
-                </div>
-                <div class="control-group">
-                    <span class="control-icon">⬇️</span>
-                    <span class="control-text">Move Down</span>
-                </div>
-                <div class="control-group">
-                    <span class="control-icon">SPACE</span>
-                    <span class="control-text">Start/Pause</span>
-                </div>
-            </div>
-
-            <button class="reset-btn" id="reset-btn">New Game</button>
-        </div>
-
-        <footer class="footer">
-            <p>First to 5 points wins!</p>
-        </footer>
+  <canvas id="canvas"></canvas>
+  <div class="ui-container">
+    <div class="header">
+      <div class="title">✨ MARBLE CASCADE</div>
+      <div class="score">
+        <span>Score:</span>
+        <div class="score-value" id="score">0</div>
+      </div>
     </div>
+    <div class="instructions">
+      <strong>🎮 Controls:</strong><br>
+      Move mouse or touch to guide marbles<br>
+      Collect golden platforms for bonus points
+    </div>
+    <div style="text-align: center;">
+      <div class="button-group" style="pointer-events: auto;">
+        <button class="reset-btn" onclick="location.reload()">Reset Game</button>
+      </div>
+      <div class="footer" style="margin-top: 20px;">
+        Watch the beautiful cascade of physics • Enjoy the smooth interactions
+      </div>
+    </div>
+  </div>
 
-    <script src="script.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
