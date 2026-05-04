@@ -25,6 +25,7 @@ scene.add(pointLight2);
 const world = new CANNON.World();
 world.gravity.set(0, -30, 0);
 world.defaultContactMaterial.friction = 0.3;
+world.defaultContactMaterial.restitution = 0.5;
 
 // Camera position
 camera.position.set(0, 15, 30);
@@ -66,11 +67,13 @@ class Marble {
   }
 }
 
-// Create initial marbles
+// Create initial marbles with spacing
 for (let i = 0; i < 8; i++) {
-  const x = (Math.random() - 0.5) * 10;
-  const z = (Math.random() - 0.5) * 10;
-  marbles.push(new Marble(x, 20 + i * 2, z));
+  const x = (Math.random() - 0.5) * 8;
+  const z = (Math.random() - 0.5) * 8;
+  const marble = new Marble(x, 25 + i * 3, z);
+  marble.body.velocity.set(0, -5, 0);
+  marbles.push(marble);
 }
 
 // Platforms
@@ -130,7 +133,7 @@ ground.position.y = -5;
 ground.receiveShadow = true;
 scene.add(ground);
 
-const groundShape = new CANNON.Plane();
+const groundShape = new CANNON.Box(new CANNON.Vec3(20, 1, 20));
 const groundBody = new CANNON.Body({ mass: 0, shape: groundShape });
 groundBody.position.y = -5;
 world.addBody(groundBody);
@@ -157,21 +160,30 @@ function applyMouseForce() {
 }
 
 // Score update on platform collision
+const marbleContactPlatforms = new Set();
 world.addEventListener('collide', (e) => {
-  platforms.forEach(platform => {
-    if ((e.body === marbles[0]?.body && e.target === platform.body) ||
-        (e.target === marbles[0]?.body && e.body === platform.body)) {
-      if (platform.isBonus) {
-        score += 50;
-      } else {
-        score += 10;
+  marbles.forEach((marble, marbleIndex) => {
+    platforms.forEach((platform, platformIndex) => {
+      if ((e.body === marble.body && e.target === platform.body) ||
+          (e.target === marble.body && e.body === platform.body)) {
+        const contactKey = `${marbleIndex}-${platformIndex}`;
+        if (!marbleContactPlatforms.has(contactKey)) {
+          marbleContactPlatforms.add(contactKey);
+          if (platform.isBonus) {
+            score += 50;
+          } else {
+            score += 10;
+          }
+          document.getElementById('score').textContent = score;
+          setTimeout(() => marbleContactPlatforms.delete(contactKey), 500);
+        }
       }
-      document.getElementById('score').textContent = score;
-    }
+    });
   });
 });
 
 // Animation loop
+let frameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
 
@@ -183,15 +195,20 @@ function animate() {
     marble.update();
     
     // Reset marble if it falls too low
-    if (marble.body.position.y < -15) {
+    if (marble.body.position.y < -20) {
       marble.body.position.set(
-        (Math.random() - 0.5) * 10,
-        20,
-        (Math.random() - 0.5) * 10
+        (Math.random() - 0.5) * 8,
+        25,
+        (Math.random() - 0.5) * 8
       );
-      marble.body.velocity.set(0, 0, 0);
+      marble.body.velocity.set(0, -5, 0);
     }
   });
+
+  frameCount++;
+  if (frameCount === 1) {
+    console.log("[v0] Game initialized - marbles:", marbles.length, "platforms:", platforms.length);
+  }
 
   renderer.render(scene, camera);
 }
